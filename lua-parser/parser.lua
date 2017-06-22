@@ -20,6 +20,7 @@ stat:
   | `Label{ <string> }                        -- ::str::
   | `Return{ <expr*> }                        -- return e1, e2...
   | `Break                                    -- break
+  | `Continue                                 -- continue
   | apply
 
 expr:
@@ -116,10 +117,6 @@ local labels = {
   { "ErrOrExpr", "expected an expression after 'or'" },
   { "ErrAndExpr", "expected an expression after 'and'" },
   { "ErrRelExpr", "expected an expression after the relational operator" },
-  { "ErrBOrExpr", "expected an expression after '|'" },
-  { "ErrBXorExpr", "expected an expression after '~'" },
-  { "ErrBAndExpr", "expected an expression after '&'" },
-  { "ErrShiftExpr", "expected an expression after the bit shift" },
   { "ErrConcatExpr", "expected an expression after '..'" },
   { "ErrAddExpr", "expected an expression after the additive operator" },
   { "ErrMulExpr", "expected an expression after the multiplicative operator" },
@@ -154,6 +151,7 @@ local labels = {
   { "ErrCBraceUEsc", "expected '}' after the code point" },
   { "ErrEscSeq", "invalid escape sequence" },
   { "ErrCloseLStr", "unclosed long string" },
+  { "ErrCloseBComment", "unclosed block comment" },
 }
 
 local function throw(label)
@@ -264,7 +262,7 @@ local G = { V"Lua",
 
   Block       = tagC("Block", V"Stat"^0 * V"RetStat"^-1);
   Stat        = V"IfStat" + V"DoStat" + V"WhileStat" + V"RepeatStat" + V"ForStat"
-              + V"LocalStat" + V"FuncStat" + V"BreakStat" + V"LabelStat" + V"GoToStat"
+              + V"LocalStat" + V"FuncStat" + V"BreakStat" + V"ContinueStat" + V"LabelStat" + V"GoToStat"
               + V"FuncCall" + V"Assignment" + sym(";") + -V"BlockEnd" * throw("InvalidStat");
   BlockEnd    = P"return" + "end" + "elseif" + "else" + "until" + -1;
 
@@ -302,6 +300,7 @@ local G = { V"Lua",
   LabelStat  = tagC("Label", sym("::") * expect(V"Name", "Label") * expect(sym("::"), "CloseLabel"));
   GoToStat   = tagC("Goto", kw("goto") * expect(V"Name", "Goto"));
   BreakStat  = tagC("Break", kw("break"));
+  ContinueStat = tagC("Continue", kw("continue"));
   RetStat    = tagC("Return", kw("return") * commaSep(V"Expr", "RetList")^-1 * sym(";")^-1);
 
   NameList  = tagC("NameList", commaSep(V"Id"));
@@ -311,11 +310,7 @@ local G = { V"Lua",
   Expr        = V"OrExpr";
   OrExpr      = chainOp(V"AndExpr", V"OrOp", "OrExpr");
   AndExpr     = chainOp(V"RelExpr", V"AndOp", "AndExpr");
-  RelExpr     = chainOp(V"BOrExpr", V"RelOp", "RelExpr");
-  BOrExpr     = chainOp(V"BXorExpr", V"BOrOp", "BOrExpr");
-  BXorExpr    = chainOp(V"BAndExpr", V"BXorOp", "BXorExpr");
-  BAndExpr    = chainOp(V"ShiftExpr", V"BAndOp", "BAndExpr");
-  ShiftExpr   = chainOp(V"ConcatExpr", V"ShiftOp", "ShiftExpr");
+  RelExpr     = chainOp(V"ConcatExpr", V"RelOp", "RelExpr");
   ConcatExpr  = V"AddExpr" * (V"ConcatOp" * expect(V"ConcatExpr", "ConcatExpr"))^-1 / binaryOp;
   AddExpr     = chainOp(V"MulExpr", V"AddOp", "AddExpr");
   MulExpr     = chainOp(V"UnaryExpr", V"MulOp", "MulExpr");
@@ -363,11 +358,14 @@ local G = { V"Lua",
   Skip     = (V"Space" + V"Comment")^0;
   Space    = space^1;
   Comment  = P"--" * V"LongStr" / function () return end
-           + P"--" * (P(1) - P"\n")^0;
+           + P"/*" * (P(1) - V"EndBComment")^0 * expect(V"EndBComment", "CloseBComment")
+           + P"--" * (P(1) - P"\n")^0
+           + P"//" * (P(1) - P"\n")^0;
+  EndBComment = P"*/";
 
   Name      = token(-V"Reserved" * C(V"Ident"));
   Reserved  = V"Keywords" * -V"IdRest";
-  Keywords  = P"and" + "break" + "do" + "elseif" + "else" + "end"
+  Keywords  = P"and" + "break" + "continue" + "do" + "elseif" + "else" + "end"
             + "false" + "for" + "function" + "goto" + "if" + "in"
             + "local" + "nil" + "not" + "or" + "repeat" + "return"
             + "then" + "true" + "until" + "while";
@@ -425,30 +423,27 @@ local G = { V"Lua",
   Equals   = P"="^0;
   CloseEq  = Cmt(V"Close" * Cb("openEq"), function (s, i, closeEq, openEq) return #openEq == #closeEq end);
 
-  OrOp      = kw("or")   / "or";
-  AndOp     = kw("and")  / "and";
+  OrOp      = kw("or")   / "or"
+            + sym("||")  / "or";
+  AndOp     = kw("and")  / "and"
+            + sym("&&")  / "and";
   RelOp     = sym("~=")  / "ne"
+            + sym("!=")  / "ne"
             + sym("==")  / "eq"
             + sym("<=")  / "le"
             + sym(">=")  / "ge"
             + sym("<")   / "lt"
             + sym(">")   / "gt";
-  BOrOp     = sym("|")   / "bor";
-  BXorOp    = sym("~" * -P"=") / "bxor";
-  BAndOp    = sym("&")   / "band";
-  ShiftOp   = sym("<<")  / "shl"
-            + sym(">>")  / "shr";
   ConcatOp  = sym("..")  / "concat";
   AddOp     = sym("+")   / "add"
             + sym("-")   / "sub";
   MulOp     = sym("*")   / "mul"
-            + sym("//")  / "idiv"
             + sym("/")   / "div"
             + sym("%")   / "mod";
   UnaryOp   = kw("not")  / "not"
+            + sym("!")   / "not"
             + sym("-")   / "unm"
-            + sym("#")   / "len"
-            + sym("~")   / "bnot";
+            + sym("#")   / "len";
   PowOp     = sym("^")   / "pow";
 }
 
