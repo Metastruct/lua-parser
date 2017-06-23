@@ -262,8 +262,8 @@ local G = { V"Lua",
 
   Block       = tagC("Block", V"Stat"^0 * V"RetStat"^-1);
   Stat        = V"IfStat" + V"DoStat" + V"WhileStat" + V"RepeatStat" + V"ForStat"
-              + V"LocalStat" + V"FuncStat" + V"BreakStat" + V"ContinueStat" + V"LabelStat" + V"GoToStat"
-              + V"FuncCall" + V"Assignment" + sym(";") + -V"BlockEnd" * throw("InvalidStat");
+              + V"LocalStat" + V"FuncStat" + V"BreakStat" + V"ContinueStat" + V"LabelStat" + V"FuncCall" + V"Assignment" + V"GoToStat"
+              + sym(";") + -V"BlockEnd" * throw("InvalidStat");
   BlockEnd    = P"return" + "end" + "elseif" + "else" + "until" + -1;
 
   IfStat      = tagC("If", V"IfPart" * V"ElseIfPart"^0 * V"ElsePart"^-1 * expect(kw("end"), "EndIf"));
@@ -366,7 +366,7 @@ local G = { V"Lua",
   Name      = token(-V"Reserved" * C(V"Ident"));
   Reserved  = V"Keywords" * -V"IdRest";
   Keywords  = P"and" + "break" + "continue" + "do" + "elseif" + "else" + "end"
-            + "false" + "for" + "function" + "goto" + "if" + "in"
+            + "false" + "for" + "function" + "if" + "in"
             + "local" + "nil" + "not" + "or" + "repeat" + "return"
             + "then" + "true" + "until" + "while";
   Ident     = V"IdStart" * V"IdRest"^0;
