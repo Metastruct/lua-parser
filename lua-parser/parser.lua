@@ -146,9 +146,6 @@ local labels = {
 
   { "ErrQuote", "unclosed string" },
   { "ErrHexEsc", "expected exactly two hexadecimal digits after '\\x'" },
-  { "ErrOBraceUEsc", "expected '{' after '\\u'" },
-  { "ErrDigitUEsc", "expected one or more hexadecimal digits for the UTF-8 code point" },
-  { "ErrCBraceUEsc", "expected '}' after the code point" },
   { "ErrEscSeq", "invalid escape sequence" },
   { "ErrCloseLStr", "unclosed long string" },
   { "ErrCloseBComment", "unclosed block comment" },
@@ -406,14 +403,6 @@ local G = { V"Lua",
 
            + digit * digit^-2 / tonumber / string.char
            + P"x" * expect(C(xdigit * xdigit), "HexEsc") * Cc(16) / tonumber / string.char
-           + P"u" * expect("{", "OBraceUEsc")
-                  * expect(C(xdigit^1), "DigitUEsc") * Cc(16)
-                  * expect("}", "CBraceUEsc")
-                  / tonumber 
-                  / (utf8 and utf8.char or string.char)  -- true max is \u{10FFFF}
-                                                         -- utf8.char needs Lua 5.3
-                                                         -- string.char works only until \u{FF}
-
            + throw("EscSeq")
            );
 
