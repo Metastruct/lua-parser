@@ -367,8 +367,12 @@ local G = { V"Lua",
             + "local" + "nil" + "not" + "or" + "repeat" + "return"
             + "then" + "true" + "until" + "while";
   Ident     = V"IdStart" * V"IdRest"^0;
-  IdStart   = alpha + P"_";
-  IdRest    = alnum + P"_";
+  UTF8Cont  = lpeg.R("\128\191"); -- continuation byte
+  UTF8      = lpeg.R("\194\223") * V"UTF8Cont" -- 2 byte sequence
+            + lpeg.R("\224\239") * V"UTF8Cont" * V"UTF8Cont" -- 3 byte sequence
+            + lpeg.R("\240\244") * V"UTF8Cont" * V"UTF8Cont" * V"UTF8Cont"; -- 4 byte sequence
+  IdStart   = alpha + V"UTF8" + P"_";
+  IdRest    = alnum + V"UTF8" + P"_";
 
   Number   = token((V"Hex" + V"Float" + V"Int") / tonumber);
   Hex      = (P"0x" + "0X") * expect(xdigit^1, "DigitHex");
